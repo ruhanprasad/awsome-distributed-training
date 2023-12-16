@@ -1,0 +1,12 @@
+# This config file is to be used together with another base config file, to:
+#   1. Disable exporting checkpoints
+#   2. To train for 10 steps only
+
+rubik_job {
+  model {
+    checkpoints {
+      checkpoints_dir: ""  # "{root_dir}/checkpoints-latest"
+    }
+    max_total_steps: 10
+  }
+}

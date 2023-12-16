@@ -1,0 +1,17 @@
+name: "gpt-neox-007b"
+rubik_job {
+  fsdp {
+    sharding_strategy: HYBRID_SHARD
+    sharded_data_parallel_degree: 16
+  }
+  model {
+    transformer_model {
+      named_model: GPT_NEOX_007B
+    }
+  }
+}
+runtime {
+  nodes {
+    num_nodes: 2
+  }
+}

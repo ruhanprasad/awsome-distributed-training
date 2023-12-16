@@ -1,0 +1,17 @@
+name: "llama2-007b"
+rubik_job {
+  fsdp {
+    sharding_strategy: HYBRID_SHARD
+    sharded_data_parallel_degree: 64
+  }
+  model {
+    transformer_model {
+      named_model: LLAMA_V2_007B
+    }
+  }
+}
+runtime {
+  nodes {
+    num_nodes: 2
+  }
+}

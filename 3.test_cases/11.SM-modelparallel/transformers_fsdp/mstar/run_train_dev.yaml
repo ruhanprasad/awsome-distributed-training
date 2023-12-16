@@ -1,0 +1,31 @@
+name: "rubik-test-dev"
+priority_level: "high-priority"
+node_type: "p4d.24xlarge"
+node_num: 2
+region: "us-east-1"
+spine: "spine12"
+project: "other"
+dag_type: "elastic_job_dag"
+use_elastic_controller: False
+image: 747303060528.dkr.ecr.us-east-2.amazonaws.com/mstar-eks:sm-pytorch_sm-v2.0.1-test8
+command: ["bash", "-c"]
+args: [
+    "/opt/conda/bin/torchrun --nnodes=2 --nproc_per_node=8 --rdzv_endpoint=$MASTER_ADDR:29400 --rdzv_id=100 --rdzv_backend=c10d /rubik2/SMModelParallelExamples/SMModelParallelExamples/pytorch/transformers_fsdp/train.py --train_batch_size 4 --val_batch_size 1 --max_steps 10 --seed 12345 --fp16 0 --bf16 1 --lr 0.0001 --min_lr 1e-05 --beta1 0.9 --beta2 0.95 --adam_eps 1e-12 --initializer_range 0.009 --lr_decay_style cosine --lr_decay_iters 47683 --warmup 0.0032 --plateau 0.0 --num_kept_checkpoints 1000 --checkpoint_freq 10 --checkpoint_dir $SM_OUTPUT_DATA_DIR --validation_freq 500 --logging_freq 1 --weight_decay 0.2 --parallel_proc_data_processing 0 --use_adamw 1 --max_context_width 4096 --hidden_width $HIDDEN_WIDTH --num_layers $NUM_LAYERS --num_heads $NUM_HEADS --offload_activations $OFFLOAD_ACTIVATIONS --offload_impl $OFFLOAD_IMPL --clean_cache 0 --activation_checkpointing 1 --enable_memory_profiling 0 --forward_prefetch --vocab_size 50432 --limit_all_gathers --backward_fetch_policy backward_pre --sharding_strategy hybrid_shard --shard_degree 16 --auto_wrap_policy transformer_auto_wrap_policy --delayed_param 1 --model_type llama_v2 --llama_intermediate_size 11008 --num_key_value_heads 1"
+]
+env:
+    SM_NUM_GPUS: 8
+    SM_CHANNEL_TRAIN: "s3://sagemaker-us-west-2-855988369404/gpt-debug/data/train_ids_wsvocab_redo_2048_smaller/"
+    SM_CHANNEL_TEST: "s3://sagemaker-us-west-2-855988369404/gpt-debug/data/val_ids_wsvocab_2048/"
+    SM_OUTPUT_DATA_DIR: "s3://sagemaker-us-west-2-855988369404/mstar_output/"
+    GPU_NUM_DEVICES: 8
+    NCCL_SOCKET_IFNAME: "^lo,docker"
+    RDMAV_FORK_SAFE: 1
+    FI_EFA_USE_DEVICE_RDMA: 1
+    NCCL_DEBUG_SUBSYS: off
+    NCCL_DEBUG: "INFO"
+    CUDA_LAUNCH_BLOCKING: 0
+    OFFLOAD_ACTIVATIONS: 0
+    OFFLOAD_IMPL: "sagemaker"
+    HIDDEN_WIDTH: 4096
+    NUM_LAYERS: 32
+    NUM_HEADS: 32

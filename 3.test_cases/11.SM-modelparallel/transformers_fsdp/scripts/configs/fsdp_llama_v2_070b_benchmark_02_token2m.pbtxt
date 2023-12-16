@@ -1,0 +1,263 @@
+name: "fsdp_llama_v2_070b_benchmark-02-token2m-smddp"
+global_base_job {
+  rubik_job {
+    fsdp {
+      sharding_strategy: HYBRID_SHARD
+      backward_prefetch: BACKWARD_PRE
+      sharded_data_parallel_degree: 128
+
+      # cpu_offload: false
+      forward_prefetch: true
+      limit_all_gathers: true
+      # use_orig_params: false
+
+      mixed_precision {
+        param: BFLOAT16
+      }
+      # auto_wrap_size: 0
+      # apply_activation_checkpoint: true
+    }
+    lr_scheduler {
+      aws_annealing_lr {
+        cosine_decay {
+        }
+        min_lr: 1e-5
+        # https://huggingface.co/decapoda-research/llama-65b-hf
+        start_lr: 0.00015
+        total_iters: 47683
+        warmup_fraction: 0.0032
+      }
+    }
+    model {
+      experiment_id: "exp_{user}_{YYYY}{MM}{DD}-{hh}{mm}{ss}"
+      experiment_name: "job{job_id}__smddp-m{model_size}-c{ckpt}o{offload}-ns{num_nodes}_pp{pp}-sdp{sdp}-tp{tp}-run{job_run}"
+      # Using `/fsx/experiments-{user}/`: As one user won't have access to dirs created by other users.
+      root_dir: "/fsx/experiments-{user}/{job_name}/{experiment_id}/{experiment_name}"
+      log_file_prefix: "{root_dir}/log"
+      ttl: "120d"
+
+      checkpoints {
+        checkpoints_dir: ""  # "{root_dir}/checkpoints-latest"
+        checkpoint_freq: 20
+        load_partial: true  # Will reuse checkpoint dir iff it exists.
+        max_num_checkpoints: 2
+      }
+      # checkpoints_extra { }
+      log {
+        logging_freq: 1
+      }
+      max_total_epochs:100
+      max_total_steps: 50
+      same_seed: false
+      seed: 12345
+      shared_data {
+        batch_size: 4
+        dirs: ""
+        file_extension: ".json.gz"
+        # Using synthetic dataset to avoid issues with long sequences `max_position_embeddings`.
+        use_synthetic_data: true
+      }
+      tensorboard {
+      }
+      train_data {
+        dirs: "/fsx/datasets/train_ids_wsvocab_redo_2048_smaller"
+      }
+      transformer_model {
+        # https://huggingface.co/decapoda-research/llama-65b-hf
+        named_model: LLAMA_V2_070B
+      }
+      validation_freq: 200
+      val_data {
+        dirs: "/fsx/datasets/val_ids_wsvocab_2048"
+        batch_size: 1
+      }
+    }
+    optimizer {
+      adam_w {
+        beta1: 0.9
+        beta2: 0.95
+        weight_decay: 0.2
+      }
+    }
+  }
+  runtime {
+    nodes {
+      num_nodes: 16
+      cluster_nodes {
+        # user: ""  # Inferred at runtime if not provided: `whoami` and then find your alias
+      }
+    }
+    container {
+      container_option: RUBIK_V2_SM_PYTORCH__BRANCH__SM__V2d0d1
+      # image_timestamp: "_20230510"
+      # container_name: "sm-pytorch-conda-builder__sm-pytorch_sm-v2.0.1"  # Won't be used in `smprun`
+    }
+    mpi_cmd {
+      # 0. Make a copy of raw config file.
+      system_cmd_pre: "cp {input_config_file} {raw_config_file}"
+      system_cmd_pre: "chmod -w {raw_config_file}"
+
+      # 1. Launch and run script, or prepare host file: N.A.
+
+      # 2. Script to run the launch script.
+
+      #                                               1        2
+      # sbatch -N 2 smprun launch_with_config_file.sh WORK_DIR CONFIG_FILE
+      system_cmd_pre: "echo 'sbatch -p benchmark -N {num_nodes_int} {smprun_dir}/smprun -v2 -i {image_uri} -d {smprun_dir} {filename_launch_script} {config_file} {binary_script} --delayed_param 1 --distributed_backend smddp' > {filename_mpi_script}"
+      system_cmd_pre: "cat {filename_mpi_script} | tr ' ' '\\n' > {filename_mpi_script}.copy"
+      system_cmd_pre: "chmod +x {filename_mpi_script}"
+
+      system_cmd: "{filename_mpi_script}"
+
+      system_cmd_args {
+        key: "raw_config_file"
+        value: "{log_file_prefix}__job_config_raw.pbtxt"
+      }
+      system_cmd_args {
+        key: "config_file"
+        value: "{log_file_prefix}__job_config.pbtxt"
+      }
+      system_cmd_args {
+        key: "binary_script"
+        value: "/fsx/users/{user}/SMModelParallelExamples/SMModelParallelExamples/pytorch/transformers_fsdp/main.py"
+      }
+      system_cmd_args {
+        key: "filename_launch_script"
+        value: "/fsx/users/{user}/SMModelParallelExamples/SMModelParallelExamples/pytorch/transformers_fsdp/scripts/launch_with_config_file.sh"
+      }
+      system_cmd_args {
+        key: "filename_mpi_script"
+        value: "{log_file_prefix}__mpi.sh"                # Genearated on the fly.
+      }
+      system_cmd_args {
+        key: "smprun_dir"
+        value: "/fsx/users/{user}/SMModelParallelExamples/SMModelParallelExamples/bin"
+      }
+    }
+  }
+  repeat: 1
+}
+
+#
+# Num nodes: 16
+#
+
+# Global batch size 2M: 128 * 2 * 8192.
+job_instances { job {
+  rubik_job {
+    disabled: true
+    model {
+      shared_data { batch_size: 2 }
+      transformer_model { llama { max_position_embeddings: 8192 } }
+    }
+  }
+  runtime { nodes { num_nodes: 16 } }
+} }
+
+# Global batch size 2M: 128 * 4 * 4096.
+job_instances { job {
+  rubik_job {
+    disabled: true
+    model {
+      shared_data { batch_size: 4 }
+      transformer_model { llama { max_position_embeddings: 4096 } }
+    }
+  }
+  runtime { nodes { num_nodes: 16 } }
+} }
+
+# Global batch size 2M: 128 * 8 * 2048.
+job_instances { job {
+  rubik_job {
+    disabled: true
+    model {
+      shared_data { batch_size: 8 }
+      transformer_model { llama { max_position_embeddings: 2048 } }
+    }
+  }
+  runtime { nodes { num_nodes: 16 } }
+} }
+
+#
+# Num nodes: 32
+#
+
+# Global batch size 2M: 256 * 1 * 8192.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 1 }
+      transformer_model { llama { max_position_embeddings: 8192 } }
+    }
+  }
+  runtime { nodes { num_nodes: 32 } }
+} }
+
+# Global batch size 2M: 256 * 2 * 4096.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 2 }
+      transformer_model { llama { max_position_embeddings: 4096 } }
+    }
+  }
+  runtime { nodes { num_nodes: 32 } }
+} }
+
+# Global batch size 2M: 256 * 4 * 2048.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 4 }
+      transformer_model { llama { max_position_embeddings: 2048 } }
+    }
+  }
+  runtime { nodes { num_nodes: 32 } }
+} }
+
+#
+# Num nodes: 64
+#
+
+# Global batch size 2M: 512 * 1 * 4096.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 1 }
+      transformer_model { llama { max_position_embeddings: 4096 } }
+    }
+  }
+  runtime { nodes { num_nodes: 64 } }
+} }
+
+# Global batch size 2M: 512 * 2 * 2048.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 2 }
+      transformer_model { llama { max_position_embeddings: 2048 } }
+    }
+  }
+  runtime { nodes { num_nodes: 64 } }
+} }
+
+#
+# Num nodes: 128
+#
+
+# Global batch size 2M: 1024 * 1 * 2048.
+job_instances { job {
+  rubik_job {
+    disabled: false
+    model {
+      shared_data { batch_size: 1 }
+      transformer_model { llama { max_position_embeddings: 2048 } }
+    }
+  }
+  runtime { nodes { num_nodes: 128 } }
+} }

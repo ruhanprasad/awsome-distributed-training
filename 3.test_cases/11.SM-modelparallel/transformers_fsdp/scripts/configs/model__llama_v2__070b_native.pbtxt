@@ -1,0 +1,17 @@
+name: "llama2-070b-native"
+rubik_job {
+  fsdp {
+    sharding_strategy: FULL_SHARD
+    sharded_data_parallel_degree: 0
+  }
+  model {
+    transformer_model {
+      named_model: LLAMA_V2_070B
+    }
+  }
+}
+runtime {
+  nodes {
+    num_nodes: 16
+  }
+}

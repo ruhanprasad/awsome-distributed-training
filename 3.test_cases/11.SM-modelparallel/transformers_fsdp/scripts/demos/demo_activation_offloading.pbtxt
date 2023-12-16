@@ -1,0 +1,18 @@
+# This config file is to be used together with another base config file, to:
+#   1. Disable exporting checkpoints
+#   2. To train for 10 steps only
+#   3. To enable FSDP activation checkpointing
+#   4. To enable FSDP activation offloading
+
+rubik_job {
+  fsdp {
+    apply_activation_checkpoint: true
+    cpu_offload: true
+  }
+  model {
+    checkpoints {
+      checkpoints_dir: ""  # "{root_dir}/checkpoints-latest"
+    }
+    max_total_steps: 10
+  }
+}
